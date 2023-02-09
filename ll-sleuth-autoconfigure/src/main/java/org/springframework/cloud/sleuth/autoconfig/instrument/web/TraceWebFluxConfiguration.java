@@ -40,11 +40,4 @@ class TraceWebFluxConfiguration {
 	TraceWebFilter traceFilter(Tracer tracer, HttpServerHandler httpServerHandler) {
 		return new TraceWebFilter(tracer, httpServerHandler);
 	}
-
-	@Bean
-	static TraceHandlerFunctionAdapterBeanPostProcessor traceHandlerFunctionAdapterBeanPostProcessor(
-			BeanFactory beanFactory) {
-		return new TraceHandlerFunctionAdapterBeanPostProcessor(beanFactory);
-	}
-
 }

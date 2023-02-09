@@ -26,11 +26,8 @@ import io.micrometer.tracing.http.HttpServerResponse;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.reactivestreams.Subscription;
-import org.springframework.beans.BeansException;
 import org.springframework.cloud.sleuth.instrument.reactor.ReactorSleuth;
 import org.springframework.cloud.sleuth.instrument.reactor.TraceContextPropagator;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -60,7 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @since 2.0.0
  */
 @Order(Ordered.HIGHEST_PRECEDENCE + 5)
-public class TraceWebFilter implements WebFilter, ApplicationContextAware {
+public class TraceWebFilter implements WebFilter {
 
 	// Remember that this can be used in other packages
 	protected static final String TRACE_REQUEST_ATTR = Span.class.getName();
@@ -74,10 +71,6 @@ public class TraceWebFilter implements WebFilter, ApplicationContextAware {
 	private final HttpServerHandler handler;
 
 	private CurrentTraceContext currentTraceContext;
-
-	private ApplicationContext applicationContext;
-
-	private SpanFromContextRetriever spanFromContextRetriever;
 
 	@Deprecated
 	public TraceWebFilter(Tracer tracer, HttpServerHandler handler) {
@@ -93,7 +86,7 @@ public class TraceWebFilter implements WebFilter, ApplicationContextAware {
 		if (log.isDebugEnabled()) {
 			log.debug("Received a request to uri [" + uri + "]");
 		}
-		return new MonoWebFilterTrace(source, exchange, tracePresent, this, spanFromContextRetriever());
+		return new MonoWebFilterTrace(source, exchange, tracePresent, this);
 	}
 
 	private boolean isTracePresent() {
@@ -105,25 +98,11 @@ public class TraceWebFilter implements WebFilter, ApplicationContextAware {
 		return tracePresent;
 	}
 
-	@Override
-	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-		this.applicationContext = applicationContext;
-	}
-
 	private CurrentTraceContext currentTraceContext() {
 		if (this.currentTraceContext == null) {
 			this.currentTraceContext = tracer.currentTraceContext();
 		}
 		return this.currentTraceContext;
-	}
-
-	private SpanFromContextRetriever spanFromContextRetriever() {
-		if (this.spanFromContextRetriever == null) {
-			this.spanFromContextRetriever = this.applicationContext.getBeanProvider(SpanFromContextRetriever.class)
-					.getIfAvailable(() -> new SpanFromContextRetriever() {
-					});
-		}
-		return this.spanFromContextRetriever;
 	}
 
 	private static class MonoWebFilterTrace extends MonoOperator<Void, Void> implements TraceContextPropagator {
@@ -142,10 +121,8 @@ public class TraceWebFilter implements WebFilter, ApplicationContextAware {
 
 		final CurrentTraceContext currentTraceContext;
 
-		final SpanFromContextRetriever spanFromContextRetriever;
-
 		MonoWebFilterTrace(Mono<? extends Void> source, ServerWebExchange exchange, boolean initialTracePresent,
-				TraceWebFilter parent, SpanFromContextRetriever spanFromContextRetriever) {
+				TraceWebFilter parent) {
 			super(source);
 			this.tracer = parent.tracer;
 			this.handler = parent.handler;
@@ -153,7 +130,6 @@ public class TraceWebFilter implements WebFilter, ApplicationContextAware {
 			this.exchange = exchange;
 			this.span = exchange.getAttribute(TRACE_REQUEST_ATTR);
 			this.initialTracePresent = initialTracePresent;
-			this.spanFromContextRetriever = spanFromContextRetriever;
 		}
 
 		@Override
@@ -182,7 +158,7 @@ public class TraceWebFilter implements WebFilter, ApplicationContextAware {
 		}
 
 		private Span findOrCreateSpan(Context c) {
-			Span span;
+			Span span = null;
 			if (c.hasKey(Span.class)) {
 				Span parent = c.get(Span.class);
 				try (Tracer.SpanInScope spanInScope = this.tracer.withSpan(parent)) {
@@ -201,8 +177,8 @@ public class TraceWebFilter implements WebFilter, ApplicationContextAware {
 						log.debug("Found span in attribute " + span);
 					}
 				}
-				span = this.spanFromContextRetriever.findSpan(c);
-				if (this.span == null && span == null) {
+
+				if (this.span == null) {
 					span = this.handler.handleReceive(new WrappedRequest(this.exchange.getRequest()));
 					if (log.isDebugEnabled()) {
 						log.debug("Handled receive of span " + span);

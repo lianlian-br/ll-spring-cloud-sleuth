@@ -33,8 +33,8 @@ repositories {
     }
 
     dependencies {
-        "implementation"(platform("org.springframework.cloud:spring-cloud-dependencies:2022.0.0"))
-        "implementation"(platform("org.springframework.boot:spring-boot-dependencies:3.0.1"))
+        "implementation"(platform("org.springframework.cloud:spring-cloud-dependencies:2022.0.1"))
+        "implementation"(platform("org.springframework.boot:spring-boot-dependencies:3.0.2"))
     }
 }
 
